@@ -1,0 +1,105 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ------------------------------------------------------
+// ENUMS
+// ------------------------------------------------------
+
+enum ProposalStatus {
+  DRAFT     // Rascunho - Pode editar tudo
+  SENT      // Enviado - Congelado para edição
+  VIEWED    // Visualizado - Cliente abriu a página
+  SIGNED    // Assinado - Irrevogável com auditoria e PDF
+  EXPIRED   // Expirado - Passou da data limite sem assinar
+  CANCELLED // Cancelado pelo prestador
+}
+
+// ------------------------------------------------------
+// MODELS
+// ------------------------------------------------------
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relacionamentos
+  clients   Client[]
+  proposals Proposal[]
+
+  @@map("users")
+}
+
+model Client {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  email     String
+  phone     String?
+  company   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relacionamentos
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  proposals Proposal[]
+
+  @@map("clients")
+}
+
+model Proposal {
+  id          String         @id @default(cuid())
+  userId      String
+  clientId    String
+  title       String
+  description String         @db.Text // Permite textos longos / HTML
+  amount      Decimal        @db.Decimal(10, 2)
+  status      ProposalStatus @default(DRAFT)
+  
+  // Segurança e Acesso Público
+  token       String         @unique @default(uuid()) // UUID v4 para /p/[token]
+  expiresAt   DateTime
+
+  // Linha do tempo de eventos
+  sentAt     DateTime?
+  viewedAt   DateTime?
+  signedAt   DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  // Relacionamentos
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client     Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  audit      SignatureAudit?
+
+  @@index([token])
+  @@index([userId])
+  @@map("proposals")
+}
+
+model SignatureAudit {
+  id                 String   @id @default(cuid())
+  proposalId         String   @unique
+  signerName         String
+  signerEmail        String
+  signatureImageUrl  String   @db.Text // URL ou Base64 da assinatura
+  ipAddress          String
+  userAgent          String
+  signedAt           DateTime @default(now())
+  pdfUrl             String?  @db.Text // Link do PDF gerado no storage
+
+  // Relacionamento 1:1 com Proposal
+  proposal           Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@map("signature_audits")
+}

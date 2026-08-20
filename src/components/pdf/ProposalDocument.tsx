@@ -6,12 +6,10 @@ import {
   View,
   Image,
   StyleSheet,
-  Font,
 } from "@react-pdf/renderer";
 
-import {ProposalDocumentProps} from "@/types/index";
+import { ProposalDocumentProps } from "@/types/index";
 
-// Estilização com a API nativa do @react-pdf/renderer
 const styles = StyleSheet.create({
   page: {
     padding: 40,
@@ -119,10 +117,13 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   signatureImage: {
-    width: 120,
-    height: 50,
-    objectFit: "contain",
-  },
+  width: 140,
+  height: 50,
+  objectFit: "contain",
+  backgroundColor: "#09090B", // Fundo escuro para destacar o traço claro da assinatura
+  borderRadius: 6,
+  padding: 4,
+},
   footer: {
     position: "absolute",
     bottom: 30,
@@ -149,7 +150,9 @@ export function ProposalDocument({ proposal }: ProposalDocumentProps) {
         {/* Cabeçalho */}
         <View style={styles.header}>
           <Text style={styles.brand}>ProposalEngine</Text>
-          <Text style={styles.badge}>DOCUMENTO ASSINADO DIGITALMENTE</Text>
+          <Text style={styles.badge}>
+            {proposal.audit ? "DOCUMENTO ASSINADO DIGITALMENTE" : "PROPOSTA COMERCIAL"}
+          </Text>
         </View>
 
         {/* Título & Valor */}
@@ -189,7 +192,7 @@ export function ProposalDocument({ proposal }: ProposalDocumentProps) {
               Registro de Auditoria e Validade Jurídica
             </Text>
             <View style={styles.auditRow}>
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.auditText}>
                   Assinado por: {proposal.audit.signerName} ({proposal.audit.signerEmail})
                 </Text>
@@ -200,9 +203,11 @@ export function ProposalDocument({ proposal }: ProposalDocumentProps) {
                   Endereço IP: {proposal.audit.ipAddress}
                 </Text>
                 <Text style={styles.auditText}>
-                  Navegador: {proposal.audit.userAgent.substring(0, 50)}...
+                  Navegador: {proposal.audit.userAgent ? proposal.audit.userAgent.substring(0, 45) : 'N/A'}...
                 </Text>
               </View>
+
+              {/* Renderização condicional da Imagem Base64/URL */}
               {proposal.audit.signatureImageUrl && (
                 <Image
                   src={proposal.audit.signatureImageUrl}

@@ -8,6 +8,7 @@ import { createProposalAction } from "@/actions/proposal-actions";
 import { Client } from "@prisma/client";
 import { useState } from "react";
 import { Loader2, PlusCircle } from "lucide-react";
+import { useAuth } from '@clerk/nextjs'
 
 // Mesmo esquema usado na Server Action
 const proposalSchema = z.object({
@@ -21,6 +22,7 @@ const proposalSchema = z.object({
 type ProposalFormData = z.infer<typeof proposalSchema>;
 
 export function ProposalForm({ clients }: { clients: Client[] }) {
+  const { userId } = useAuth()
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -37,9 +39,13 @@ export function ProposalForm({ clients }: { clients: Client[] }) {
     setIsSubmitting(true);
     setErrorMessage("");
 
-    // Nota: Em produção, o userId viria da sessão (Clerk/NextAuth)
-    const result = await createProposalAction("user_default_id", {
-      ...data,
+            // Nota: Em produção, o userId viria da sessão (Clerk/NextAuth)
+    const result = await createProposalAction({
+      userId: userId || "user_default_id",
+      clientId: data.clientId,
+      title: data.title,
+      description: data.description,
+      amount: Number(data.amount),
       expiresAt: new Date(data.expiresAt),
     });
 

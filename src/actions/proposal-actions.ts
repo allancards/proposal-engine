@@ -1,18 +1,19 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { currentUser } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { ProposalStatus } from '@prisma/client'
 import { z } from 'zod'
-import {serializeProposal} from "@/lib/serialize";
+import { serializeProposal } from '@/lib/serialize'
 import { resend } from '@/lib/resend'
 
-// Esquema de validação para criação de proposta
+// Esquema de validação mantendo a estrutura exata do seu schema.prisma
 const createProposalSchema = z.object({
   clientId: z.string().min(1, 'Selecione um cliente'),
   title: z.string().min(3, 'O título deve ter no mínimo 3 caracteres'),
   description: z.string().min(10, 'A descrição deve ter pelo menos 10 caracteres'),
-  amount: z.coerce.number().positive({message: 'O valor deve ser maior que zero'}),
+  amount: z.coerce.number().positive({ message: 'O valor deve ser maior que zero' }),
   expiresAt: z.coerce.date().refine((date) => date > new Date(), {
     message: 'A data de expiração deve ser uma data futura',
   }),
@@ -20,13 +21,28 @@ const createProposalSchema = z.object({
 
 export type CreateProposalInput = z.infer<typeof createProposalSchema>
 
-/**
- * Salva a proposta inicialmente no status RASCUNHO (DRAFT).
- * Nesse estado, a proposta ainda pode ser livremente editada.
- */
-export async function createProposalAction(userId: string, data: CreateProposalInput) {
+export async function createProposalAction(input: { userId: string } & CreateProposalInput) {
   try {
+    // Valida os dados ignorando o userId na validação do Zod
+    const { userId, ...data } = input
     const validated = createProposalSchema.parse(data)
+
+    const clerkUser = await currentUser()
+    const realEmail = clerkUser?.emailAddresses[0]?.emailAddress || 'prestador@exemplo.com'
+    const realName = clerkUser?.fullName || clerkUser?.firstName || 'Prestador de Serviço'
+
+    await prisma.user.upsert({
+      where: { id: userId },
+      update: {
+        name: realName,
+        email: realEmail,
+      },
+      create: {
+        id: userId,
+        name: realName,
+        email: realEmail,
+      },
+    })
 
     const proposal = await prisma.proposal.create({
       data: {
@@ -44,20 +60,15 @@ export async function createProposalAction(userId: string, data: CreateProposalI
     revalidatePath('/proposals')
 
     return { success: true, data: serializeProposal(proposal) }
-    
-
   } catch (error) {
+    console.error('Erro detalhado no createProposalAction:', error)
+
     if (error instanceof z.ZodError) {
       return { success: false, error: error.issues[0].message }
     }
     return { success: false, error: 'Erro ao criar proposta em rascunho.' }
   }
 }
-
-/**
- * Altera o status da proposta de DRAFT para SENT.
- * Aplica a Regra de Negócio: Trava a proposta para edição e gera o carimbo de data/hora de envio.
- */
 
 export async function sendProposalAction(proposalId: string) {
   try {
@@ -77,7 +88,6 @@ export async function sendProposalAction(proposalId: string) {
       }
     }
 
-    // 1. Atualiza o status no banco de dados
     const updatedProposal = await prisma.proposal.update({
       where: { id: proposalId },
       data: {
@@ -86,13 +96,9 @@ export async function sendProposalAction(proposalId: string) {
       },
     })
 
-    // 2. Monta o link público de assinatura
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     const publicUrl = `${baseUrl}/p/${updatedProposal.token}`
 
-    // 3. Dispara o e-mail transacional via Resend
-    // Em modo de testes do Resend (sem domínio próprio verificado), 
-    // envie de 'onboarding@resend.dev' para o e-mail cadastrado na sua conta do Resend.
     await resend.emails.send({
       from: 'ProposalEngine <onboarding@resend.dev>',
       to: [proposal.client.email],

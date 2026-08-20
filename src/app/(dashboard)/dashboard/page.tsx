@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { ProposalStatus } from "@prisma/client";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { DownloadPdfButton } from "@/components/dashboard/DownloadPdfButton";
+import {CreateClientDialog} from "@/components/createClient/create-client-dialog";
 import { 
   Plus, 
   DollarSign, 
@@ -69,6 +70,7 @@ export default async function DashboardPage() {
           <Plus className="w-4 h-4" />
           Nova Proposta
         </Link>
+        <CreateClientDialog />
             </div>
       </div>
 

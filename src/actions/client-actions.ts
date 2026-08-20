@@ -4,7 +4,6 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 
-// Esquema de validação com Zod
 const clientSchema = z.object({
   name: z.string().min(2, 'O nome deve ter pelo menos 2 caracteres'),
   email: z.string().email('E-mail inválido'),
@@ -14,13 +13,22 @@ const clientSchema = z.object({
 
 export type CreateClientInput = z.infer<typeof clientSchema>
 
-/**
- * Cadastra um novo cliente vinculado ao prestador logado.
- */
 export async function createClientAction(userId: string, data: CreateClientInput) {
   try {
     const validated = clientSchema.parse(data)
 
+    // 1. Garante que o ID do Clerk existe na tabela User para não violar a Foreign Key
+    await prisma.user.upsert({
+      where: { id: userId },
+      update: {},
+      create: {
+        id: userId,
+        email: validated.email,
+        name: 'Usuário do Sistema',
+      },
+    })
+
+    // 2. Cria o cliente vinculado ao usuário
     const client = await prisma.client.create({
       data: {
         ...validated,
@@ -28,13 +36,15 @@ export async function createClientAction(userId: string, data: CreateClientInput
       },
     })
 
-    // Atualiza o cache do Next.js nas páginas que usam a lista de clientes
     revalidatePath('/dashboard')
     revalidatePath('/clients')
     revalidatePath('/proposals/new')
 
     return { success: true, data: client }
   } catch (error) {
+    // Exibe o erro exato do Prisma/Postgres no terminal do VS Code
+    console.error('Erro detalhado no createClientAction:', error)
+
     if (error instanceof z.ZodError) {
       return { success: false, error: error.issues[0].message }
     }
